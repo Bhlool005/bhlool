@@ -1,4 +1,7 @@
+Abdallah Ahmed
+
 # Scene renderer
+
 
 This project provides a tiny, deterministic scene renderer used as the base
 repository for the course. It models scenes composed of rectangles and renders
