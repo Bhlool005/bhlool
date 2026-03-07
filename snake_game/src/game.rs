@@ -373,6 +373,7 @@ fn parse_command(input: &str) -> Option<char> {
 
 pub fn run() -> io::Result<()> {
     let mut game = Game::new(DEFAULT_WIDTH, DEFAULT_HEIGHT);
+    let mut input_connected = true;
 
     let (tx, rx) = mpsc::channel::<String>();
 
@@ -395,20 +396,26 @@ pub fn run() -> io::Result<()> {
 
         let tick_delay = game.speed.tick_delay();
 
-        match rx.recv_timeout(tick_delay) {
-            Ok(input) => {
-                if let Some(cmd) = parse_command(&input) {
-                    if let Some(action) = game.handle_command(cmd) {
-                        match action {
-                            "quit" => break,
-                            "restart" => game = Game::new(DEFAULT_WIDTH, DEFAULT_HEIGHT),
-                            _ => {}
+        if input_connected {
+            match rx.recv_timeout(tick_delay) {
+                Ok(input) => {
+                    if let Some(cmd) = parse_command(&input) {
+                        if let Some(action) = game.handle_command(cmd) {
+                            match action {
+                                "quit" => break,
+                                "restart" => game = Game::new(DEFAULT_WIDTH, DEFAULT_HEIGHT),
+                                _ => {}
+                            }
                         }
                     }
                 }
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    input_connected = false;
+                }
             }
-            Err(mpsc::RecvTimeoutError::Timeout) => {}
-            Err(_) => break,
+        } else {
+            thread::sleep(tick_delay);
         }
 
         game.step();
