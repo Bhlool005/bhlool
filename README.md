@@ -1,29 +1,26 @@
-# Abdallah Ahmed
+# bhlool terminal snake game
 
-# Scene renderer
+This repository contains a single Rust crate that runs a colorful terminal Snake game.
 
+## Right locations (canonical structure)
 
-This project provides a tiny, deterministic scene renderer used as the base
-repository for the course. It models scenes composed of rectangles and renders
-them to a line-based string output.
+Only these locations are needed for the runnable game:
 
-This repository is intentionally minimal and will be extended throughout the
-semester.
+- `src/main.rs` — binary entrypoint (`game::run()`).
+- `src/game.rs` — all game logic and rendering.
+- `Cargo.toml` / `Cargo.lock` — crate manifest and lockfile.
 
-## Build
+There are no duplicate game folders in this repo.
+
+## Run
 
 ```bash
-cargo build
+cargo run
 ```
 
-## Test
+## Check
 
 ```bash
+cargo fmt --check
 cargo test
 ```
-
-## CI Expectations
-
-All assignments require the GitHub Actions CI checks to be passing. The CI
-workflow runs formatting, linting, and the test suite on every push and pull
-request.
