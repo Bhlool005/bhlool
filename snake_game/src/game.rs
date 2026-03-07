@@ -129,21 +129,11 @@ impl Game {
         let height = height.max(MIN_BOARD_SIZE);
 
         let mut snake = VecDeque::new();
-
-        let center = Point {
-            x: width / 2,
-            y: height / 2,
-        };
+        let center = Point { x: width / 2, y: height / 2 };
 
         snake.push_front(center);
-        snake.push_back(Point {
-            x: center.x - 1,
-            y: center.y,
-        });
-        snake.push_back(Point {
-            x: center.x - 2,
-            y: center.y,
-        });
+        snake.push_back(Point { x: center.x - 1, y: center.y });
+        snake.push_back(Point { x: center.x - 2, y: center.y });
 
         let mut game = Self {
             width,
@@ -240,23 +230,11 @@ impl Game {
         }
 
         if self.mode == GameMode::WrapAround {
-            if next.x < 0 {
-                next.x = self.width - 1
-            }
-            if next.y < 0 {
-                next.y = self.height - 1
-            }
-            if next.x >= self.width {
-                next.x = 0
-            }
-            if next.y >= self.height {
-                next.y = 0
-            }
-        } else if next.x < 0
-            || next.y < 0
-            || next.x >= self.width
-            || next.y >= self.height
-        {
+            if next.x < 0 { next.x = self.width - 1 }
+            if next.y < 0 { next.y = self.height - 1 }
+            if next.x >= self.width { next.x = 0 }
+            if next.y >= self.height { next.y = 0 }
+        } else if next.x < 0 || next.y < 0 || next.x >= self.width || next.y >= self.height {
             self.over = true;
             return;
         }
@@ -325,7 +303,6 @@ impl Game {
         }
 
         out.push_str(RESET);
-
         out
     }
 
@@ -342,7 +319,6 @@ impl Game {
             'q' => return Some("quit"),
             _ => {}
         }
-
         None
     }
 }
@@ -361,14 +337,11 @@ pub fn run() -> io::Result<()> {
 
     thread::spawn(move || {
         let stdin = io::stdin();
-
         loop {
             let mut input = String::new();
-
             if stdin.read_line(&mut input).is_err() {
                 break;
             }
-
             if tx.send(input).is_err() {
                 break;
             }
