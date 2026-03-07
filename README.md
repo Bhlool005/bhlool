@@ -1,19 +1,11 @@
-# Abdallah Ahmed
+# Snake Game (Terminal)
 
-# Scene renderer
+A tiny terminal snake game written in Rust.
 
-
-This project provides a tiny, deterministic scene renderer used as the base
-repository for the course. It models scenes composed of rectangles and renders
-them to a line-based string output.
-
-This repository is intentionally minimal and will be extended throughout the
-semester.
-
-## Build
+## Run
 
 ```bash
-cargo build
+cargo run -p snake_game
 ```
 
 ## Test
@@ -22,8 +14,7 @@ cargo build
 cargo test
 ```
 
-## CI Expectations
+## Notes
 
-All assignments require the GitHub Actions CI checks to be passing. The CI
-workflow runs formatting, linting, and the test suite on every push and pull
-request.
+- Controls: `W/A/S/D` move, `M` mode, `T` speed, `P` pause, `R` restart, `Q` quit.
+- The game uses deterministic pseudo-random spawning for food and rocks.
