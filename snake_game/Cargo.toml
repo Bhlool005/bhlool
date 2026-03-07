@@ -4,8 +4,4 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-crossterm = "0.27"
-
-[[bin]]
-name = "snake_game"
-path = "src/main.rs"
+rand = "0.8"
