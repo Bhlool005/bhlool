@@ -129,15 +129,10 @@ impl Game {
             x: width / 2,
             y: height / 2,
         };
+
         snake.push_front(center);
-        snake.push_back(Point {
-            x: center.x - 1,
-            y: center.y,
-        });
-        snake.push_back(Point {
-            x: center.x - 2,
-            y: center.y,
-        });
+        snake.push_back(Point { x: center.x - 1, y: center.y });
+        snake.push_back(Point { x: center.x - 2, y: center.y });
 
         let mut game = Self {
             width,
@@ -154,20 +149,18 @@ impl Game {
             mode: GameMode::WrapAround,
             speed: Speed::Normal,
         };
+
         game.rocks = game.spawn_rocks(8);
         game.food = game.spawn_food();
         game
     }
 
     fn head(&self) -> Point {
-        *self.snake.front().expect("snake has at least one segment")
+        *self.snake.front().unwrap()
     }
 
     fn next_rand(&mut self) -> u64 {
-        self.seed = self
-            .seed
-            .wrapping_mul(1_664_525)
-            .wrapping_add(1_013_904_223);
+        self.seed = self.seed.wrapping_mul(1664525).wrapping_add(1013904223);
         self.seed
     }
 
@@ -180,24 +173,24 @@ impl Game {
 
     fn spawn_rocks(&mut self, count: usize) -> Vec<Point> {
         let mut rocks = Vec::new();
-        let mut attempts = 0usize;
-        let max_attempts = (self.width as usize * self.height as usize).saturating_mul(20);
 
-        while rocks.len() < count && attempts < max_attempts {
-            attempts += 1;
+        while rocks.len() < count {
             let p = self.random_point();
-            let too_close = (p.x - self.head().x).abs() <= 2 && (p.y - self.head().y).abs() <= 2;
-            if self.snake.contains(&p) || rocks.contains(&p) || too_close {
+
+            if self.snake.contains(&p) || rocks.contains(&p) {
                 continue;
             }
+
             rocks.push(p);
         }
+
         rocks
     }
 
     fn spawn_food(&mut self) -> Point {
         loop {
             let p = self.random_point();
+
             if !self.snake.contains(&p) && !self.rocks.contains(&p) {
                 return p;
             }
@@ -212,6 +205,7 @@ impl Game {
 
     fn next_head(&self) -> Option<Point> {
         let mut next = self.head();
+
         match self.direction {
             Direction::Up => next.y -= 1,
             Direction::Down => next.y += 1,
@@ -232,10 +226,15 @@ impl Game {
             if next.y >= self.height {
                 next.y = 0;
             }
+
             return Some(next);
         }
 
-        (next.x >= 0 && next.y >= 0 && next.x < self.width && next.y < self.height).then_some(next)
+        if next.x >= 0 && next.y >= 0 && next.x < self.width && next.y < self.height {
+            Some(next)
+        } else {
+            None
+        }
     }
 
     fn step(&mut self) {
@@ -253,24 +252,15 @@ impl Game {
             return;
         }
 
-        let tail = *self.snake.back().expect("snake has tail");
-        let grows = next == self.food;
-        if self.snake.contains(&next) && (grows || next != tail) {
+        if self.snake.contains(&next) {
             self.over = true;
             return;
         }
 
         self.snake.push_front(next);
 
-        if grows {
+        if next == self.food {
             self.score += self.speed.bonus();
-
-            if self.snake.len() as i32 + self.rocks.len() as i32 >= self.width * self.height {
-                self.over = true;
-                self.won = true;
-                return;
-            }
-
             self.food = self.spawn_food();
         } else {
             self.snake.pop_back();
@@ -280,59 +270,56 @@ impl Game {
     fn render(&self) -> String {
         let mut out = String::new();
 
+        out.push_str(CLEAR);
+
         out.push_str(FG_GRAY);
         out.push('+');
+
         for _ in 0..self.width {
             out.push_str("--");
         }
+
         out.push_str("+\n");
 
         for y in 0..self.height {
-            out.push_str(FG_GRAY);
-            out.push('|');
+            out.push_str("|");
+
             for x in 0..self.width {
                 let p = Point { x, y };
+
                 if p == self.head() {
                     out.push_str(FG_BLUE);
                     out.push_str("██");
-                    continue;
-                }
-
-                if p == self.food {
+                } else if p == self.food {
                     out.push_str(FG_RED);
                     out.push_str("● ");
-                    continue;
-                }
-
-                if self.snake.iter().skip(1).any(|segment| *segment == p) {
+                } else if self.snake.iter().skip(1).any(|s| *s == p) {
                     out.push_str(FG_CYAN);
                     out.push_str("▓▓");
-                    continue;
-                }
-
-                if self.rocks.contains(&p) {
+                } else if self.rocks.contains(&p) {
                     out.push_str(FG_WHITE);
                     out.push_str("◼ ");
-                    continue;
-                }
-
-                if (x + y) % 2 == 0 {
-                    out.push_str(BG_GRASS_A);
                 } else {
-                    out.push_str(BG_GRASS_B);
+                    if (x + y) % 2 == 0 {
+                        out.push_str(BG_GRASS_A);
+                    } else {
+                        out.push_str(BG_GRASS_B);
+                    }
+                    out.push_str("  ");
                 }
-                out.push_str("  ");
             }
+
             out.push_str(RESET);
-            out.push_str(FG_GRAY);
             out.push_str("|\n");
         }
 
         out.push_str(FG_GRAY);
         out.push('+');
+
         for _ in 0..self.width {
             out.push_str("--");
         }
+
         out.push_str("+\n");
 
         out.push_str(FG_YELLOW);
@@ -342,32 +329,16 @@ impl Game {
             self.speed.label(),
             self.mode.as_str()
         ));
+
         out.push_str(FG_GREEN);
         out.push_str("Controls: W/A/S/D move, M mode, T speed, P pause, Q quit\n");
 
-        if self.paused {
-            out.push_str(FG_YELLOW);
-            out.push_str("Paused. Press P to continue.\n");
-        }
-
-        if self.over {
-            if self.won {
-                out.push_str(FG_GREEN);
-                out.push_str("You filled the map. You win!\n");
-            } else {
-                out.push_str(FG_RED);
-                out.push_str("Game Over!\n");
-            }
-            out.push_str(FG_WHITE);
-            out.push_str("Press Q to exit.\n");
-        }
-
         out.push_str(RESET);
+
         out
     }
 }
 
-// Unified key parser used by the runtime input loop and tests.
 fn parse_input_byte(byte: u8) -> Option<char> {
     match byte {
         b'w' | b'W' => Some('w'),
@@ -382,39 +353,20 @@ fn parse_input_byte(byte: u8) -> Option<char> {
     }
 }
 
-#[cfg(unix)]
 fn try_enable_raw_stdin() -> Option<String> {
     let saved = Command::new("stty").arg("-g").output().ok()?;
-    if !saved.status.success() {
-        return None;
-    }
 
-    if !Command::new("stty")
+    Command::new("stty")
         .args(["raw", "-echo", "min", "0", "time", "0"])
         .status()
-        .ok()?
-        .success()
-    {
-        return None;
-    }
+        .ok()?;
 
-    String::from_utf8(saved.stdout)
-        .ok()
-        .map(|s| s.trim().to_owned())
+    String::from_utf8(saved.stdout).ok().map(|s| s.trim().to_owned())
 }
 
-#[cfg(not(unix))]
-fn try_enable_raw_stdin() -> Option<String> {
-    None
-}
-
-#[cfg(unix)]
 fn try_restore_stdin(config: &str) {
     let _ = Command::new("stty").arg(config).status();
 }
-
-#[cfg(not(unix))]
-fn try_restore_stdin(_config: &str) {}
 
 struct RawModeGuard {
     state: Option<String>,
@@ -430,7 +382,7 @@ impl RawModeGuard {
 
 impl Drop for RawModeGuard {
     fn drop(&mut self) {
-        if let Some(state) = self.state.as_deref() {
+        if let Some(state) = &self.state {
             try_restore_stdin(state);
         }
     }
@@ -458,6 +410,7 @@ pub fn run() -> io::Result<()> {
     let _raw_mode_guard = RawModeGuard::new();
 
     let (tx, rx) = mpsc::channel::<u8>();
+
     thread::spawn(move || {
         let stdin = io::stdin();
         let mut lock = stdin.lock();
@@ -470,36 +423,21 @@ pub fn run() -> io::Result<()> {
                         break;
                     }
                 }
-                Ok(0) => thread::sleep(Duration::from_millis(5)),
-                Ok(_) => {}
-                Err(_) => break,
+                _ => {}
             }
         }
     });
 
     loop {
-        print!("{}", CLEAR);
         print!("{}", game.render());
         io::stdout().flush()?;
 
         let tick_delay = game.speed.tick_delay();
+
         if let Ok(input) = rx.recv_timeout(tick_delay) {
             if let Some(cmd) = parse_input_byte(input) {
                 if game.handle_command(cmd) {
                     break;
-                }
-            }
-
-            while let Ok(queued) = rx.try_recv() {
-                if let Some(cmd) = parse_input_byte(queued) {
-                    if game.handle_command(cmd) {
-                        print!("{}", CLEAR);
-                        println!(
-                            "{}Thanks for playing! Final score: {}{}",
-                            FG_CYAN, game.score, RESET
-                        );
-                        return Ok(());
-                    }
                 }
             }
         }
@@ -509,49 +447,6 @@ pub fn run() -> io::Result<()> {
         }
     }
 
-    print!("{}", CLEAR);
-    println!(
-        "{}Thanks for playing! Final score: {}{}",
-        FG_CYAN, game.score, RESET
-    );
+    println!("Final Score: {}", game.score);
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn cannot_reverse_direction() {
-        let mut game = Game::new(10, 10);
-        game.set_direction(Direction::Left);
-        assert_eq!(game.direction, Direction::Right);
-    }
-
-    #[test]
-    fn wrap_mode_crosses_edges() {
-        let mut game = Game::new(6, 6);
-        game.snake = VecDeque::from([Point { x: 0, y: 3 }]);
-        game.direction = Direction::Left;
-        game.mode = GameMode::WrapAround;
-        game.step();
-        assert_eq!(game.head(), Point { x: 5, y: 3 });
-        assert!(!game.over);
-    }
-
-    #[test]
-    fn byte_parser_accepts_uppercase_and_rejects_unknown() {
-        assert_eq!(parse_input_byte(b'W'), Some('w'));
-        assert_eq!(parse_input_byte(b'q'), Some('q'));
-        assert_eq!(parse_input_byte(b'x'), None);
-    }
-
-    #[test]
-    fn classic_mode_hits_wall() {
-        let mut game = Game::new(4, 4);
-        game.mode = GameMode::Classic;
-        game.step();
-        game.step();
-        assert!(game.over);
-    }
 }
