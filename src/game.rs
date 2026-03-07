@@ -367,6 +367,7 @@ impl Game {
     }
 }
 
+// Unified key parser used by the runtime input loop and tests.
 fn parse_input_byte(byte: u8) -> Option<char> {
     match byte {
         b'w' | b'W' => Some('w'),
@@ -536,6 +537,13 @@ mod tests {
         game.step();
         assert_eq!(game.head(), Point { x: 5, y: 3 });
         assert!(!game.over);
+    }
+
+    #[test]
+    fn byte_parser_accepts_uppercase_and_rejects_unknown() {
+        assert_eq!(parse_input_byte(b'W'), Some('w'));
+        assert_eq!(parse_input_byte(b'q'), Some('q'));
+        assert_eq!(parse_input_byte(b'x'), None);
     }
 
     #[test]
