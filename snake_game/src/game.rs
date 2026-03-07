@@ -391,7 +391,7 @@ pub fn run() -> io::Result<()> {
 
     loop {
         print!("{}", game.render());
-        io::stdout().flush()?;
+        io::stdout().flush()?; 
 
         let tick_delay = game.speed.tick_delay();
 
@@ -407,9 +407,7 @@ pub fn run() -> io::Result<()> {
                     }
                 }
             }
-
             Err(mpsc::RecvTimeoutError::Timeout) => {}
-
             Err(_) => break,
         }
 
@@ -419,6 +417,4 @@ pub fn run() -> io::Result<()> {
     println!("{}Thanks for playing!{}", FG_CYAN, RESET);
 
     Ok(())
-}
-    }
 }
