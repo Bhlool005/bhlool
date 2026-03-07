@@ -1,6 +1,7 @@
 # Snake Game (Terminal)
 
 A tiny terminal snake game written in Rust.
+# hugo & abdallah
 
 ## Run
 
