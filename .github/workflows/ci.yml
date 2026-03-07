@@ -15,10 +15,13 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Format
+        working-directory: snake_game
         run: cargo fmt --check
 
       - name: Lint
+        working-directory: snake_game
         run: cargo clippy -- -D warnings
 
       - name: Test
+        working-directory: snake_game
         run: cargo test

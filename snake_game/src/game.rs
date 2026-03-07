@@ -1,4 +1,4 @@
-use std::collections::{HashSet, VecDeque};
+use std::collections::VecDeque;
 use std::io::{self, Write};
 use std::sync::mpsc;
 use std::thread;
@@ -7,9 +7,7 @@ use std::time::Duration;
 const RESET: &str = "\x1b[0m";
 const CLEAR: &str = "\x1b[2J\x1b[H";
 const FG_WHITE: &str = "\x1b[97m";
-const FG_GRAY: &str = "\x1b[90m";
 const FG_RED: &str = "\x1b[91m";
-const FG_GREEN: &str = "\x1b[92m";
 const FG_YELLOW: &str = "\x1b[93m";
 const FG_BLUE: &str = "\x1b[94m";
 const FG_CYAN: &str = "\x1b[96m";
@@ -120,7 +118,6 @@ pub struct Game {
     score: u32,
     seed: u64,
     over: bool,
-    won: bool,
     paused: bool,
     mode: GameMode,
     speed: Speed,
@@ -157,7 +154,6 @@ impl Game {
             score: 0,
             seed: 0x420_2026,
             over: false,
-            won: false,
             paused: false,
             mode: GameMode::WrapAround,
             speed: Speed::Normal,
@@ -306,7 +302,9 @@ impl Game {
             self.mode.as_str()
         ));
 
-        out.push_str("Controls: W A S D move | M mode | T speed | P pause | R restart | Q quit\n\n");
+        out.push_str(
+            "Controls: W A S D move | M mode | T speed | P pause | R restart | Q quit\n\n",
+        );
 
         for y in 0..self.height {
             for x in 0..self.width {
@@ -368,7 +366,10 @@ impl Game {
 }
 
 fn parse_command(input: &str) -> Option<char> {
-    input.chars().find(|c| !c.is_whitespace()).map(|c| c.to_ascii_lowercase())
+    input
+        .chars()
+        .find(|c| !c.is_whitespace())
+        .map(|c| c.to_ascii_lowercase())
 }
 
 pub fn run() -> io::Result<()> {
@@ -395,7 +396,7 @@ pub fn run() -> io::Result<()> {
 
     loop {
         print!("{}", game.render());
-        io::stdout().flush()?; 
+        io::stdout().flush()?;
 
         let tick_delay = game.speed.tick_delay();
 
