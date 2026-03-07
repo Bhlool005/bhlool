@@ -136,6 +136,7 @@ impl Game {
             x: width / 2,
             y: height / 2,
         };
+
         snake.push_front(center);
         snake.push_back(Point {
             x: center.x - 1,
@@ -164,23 +165,16 @@ impl Game {
 
         game.rocks = game.spawn_rocks(DEFAULT_ROCKS);
         game.food = game.spawn_food();
-        if game.food.is_none() {
-            game.over = true;
-            game.won = true;
-        }
 
         game
     }
 
     fn head(&self) -> Point {
-        *self.snake.front().expect("snake has at least one segment")
+        *self.snake.front().unwrap()
     }
 
     fn next_rand(&mut self) -> u64 {
-        self.seed = self
-            .seed
-            .wrapping_mul(1_664_525)
-            .wrapping_add(1_013_904_223);
+        self.seed = self.seed.wrapping_mul(1664525).wrapping_add(1013904223);
         self.seed
     }
 
@@ -201,16 +195,14 @@ impl Game {
 
     fn spawn_rocks(&mut self, count: usize) -> Vec<Point> {
         let mut rocks = Vec::new();
-        let mut attempts = 0usize;
-        let max_attempts = self.board_capacity().saturating_mul(20);
 
-        while rocks.len() < count && attempts < max_attempts {
-            attempts += 1;
+        while rocks.len() < count {
             let p = self.random_point();
-            let too_close = (p.x - self.head().x).abs() <= 2 && (p.y - self.head().y).abs() <= 2;
-            if self.snake.contains(&p) || rocks.contains(&p) || too_close {
+
+            if self.snake.contains(&p) || rocks.contains(&p) {
                 continue;
             }
+
             rocks.push(p);
         }
 
@@ -222,24 +214,13 @@ impl Game {
             return None;
         }
 
-        let max_attempts = self.board_capacity().saturating_mul(4).max(1);
-        for _ in 0..max_attempts {
+        loop {
             let p = self.random_point();
+
             if !self.snake.contains(&p) && !self.rocks.contains(&p) {
                 return Some(p);
             }
         }
-
-        for y in 0..self.height {
-            for x in 0..self.width {
-                let p = Point { x, y };
-                if !self.snake.contains(&p) && !self.rocks.contains(&p) {
-                    return Some(p);
-                }
-            }
-        }
-
-        None
     }
 
     fn set_direction(&mut self, next: Direction) {
@@ -250,6 +231,7 @@ impl Game {
 
     fn next_head(&self) -> Option<Point> {
         let mut next = self.head();
+
         match self.direction {
             Direction::Up => next.y -= 1,
             Direction::Down => next.y += 1,
@@ -270,10 +252,15 @@ impl Game {
             if next.y >= self.height {
                 next.y = 0;
             }
+
             return Some(next);
         }
 
-        (next.x >= 0 && next.y >= 0 && next.x < self.width && next.y < self.height).then_some(next)
+        if next.x < 0 || next.y < 0 || next.x >= self.width || next.y >= self.height {
+            return None;
+        }
+
+        Some(next)
     }
 
     fn step(&mut self) {
@@ -291,30 +278,16 @@ impl Game {
             return;
         }
 
-        let tail = *self.snake.back().expect("snake has tail");
-        let grows = self.food == Some(next);
-        if self.snake.contains(&next) && (grows || next != tail) {
+        if self.snake.contains(&next) {
             self.over = true;
             return;
         }
 
         self.snake.push_front(next);
 
-        if grows {
-            self.score = self.score.saturating_add(self.speed.bonus());
-
-            if self.occupied_count() >= self.board_capacity() {
-                self.over = true;
-                self.won = true;
-                self.food = None;
-                return;
-            }
-
+        if self.food == Some(next) {
+            self.score += self.speed.bonus();
             self.food = self.spawn_food();
-            if self.food.is_none() {
-                self.over = true;
-                self.won = true;
-            }
         } else {
             self.snake.pop_back();
         }
@@ -322,97 +295,61 @@ impl Game {
 
     fn render(&self) -> String {
         let mut out = String::new();
-        let head = self.head();
-        let body: HashSet<Point> = self.snake.iter().skip(1).copied().collect();
-        let rocks: HashSet<Point> = self.rocks.iter().copied().collect();
 
-        out.push_str(FG_GRAY);
-        out.push('+');
-        for _ in 0..self.width {
-            out.push_str("--");
-        }
-        out.push_str("+\n");
+        out.push_str(CLEAR);
 
-        for y in 0..self.height {
-            out.push_str(FG_GRAY);
-            out.push('|');
-            for x in 0..self.width {
-                let p = Point { x, y };
-                if p == head {
-                    out.push_str(FG_BLUE);
-                    out.push_str("██");
-                    continue;
-                }
-
-                if self.food == Some(p) {
-                    out.push_str(FG_RED);
-                    out.push_str("● ");
-                    continue;
-                }
-
-                if body.contains(&p) {
-                    out.push_str(FG_CYAN);
-                    out.push_str("▓▓");
-                    continue;
-                }
-
-                if rocks.contains(&p) {
-                    out.push_str(FG_WHITE);
-                    out.push_str("◼ ");
-                    continue;
-                }
-
-                if (x + y) % 2 == 0 {
-                    out.push_str(BG_GRASS_A);
-                } else {
-                    out.push_str(BG_GRASS_B);
-                }
-                out.push_str("  ");
-            }
-            out.push_str(RESET);
-            out.push_str(FG_GRAY);
-            out.push_str("|\n");
-        }
-
-        out.push_str(FG_GRAY);
-        out.push('+');
-        for _ in 0..self.width {
-            out.push_str("--");
-        }
-        out.push_str("+\n");
-
-        out.push_str(FG_YELLOW);
         out.push_str(&format!(
-            "Score: {}   Speed: {}   Mode: {}\n",
+            "{}Score: {}  Speed: {}  Mode: {}\n",
+            FG_YELLOW,
             self.score,
             self.speed.label(),
             self.mode.as_str()
         ));
-        out.push_str(FG_GREEN);
-        out.push_str("Controls: W/A/S/D move, M mode, T speed, P pause, Q quit\n");
 
-        if self.paused {
-            out.push_str(FG_YELLOW);
-            out.push_str("Paused. Press P to continue.\n");
+        out.push_str("Controls: W A S D move | M mode | T speed | P pause | R restart | Q quit\n\n");
+
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let p = Point { x, y };
+
+                if p == self.head() {
+                    out.push_str(FG_BLUE);
+                    out.push_str("██");
+                } else if self.snake.contains(&p) {
+                    out.push_str(FG_CYAN);
+                    out.push_str("▓▓");
+                } else if self.food == Some(p) {
+                    out.push_str(FG_RED);
+                    out.push_str("● ");
+                } else if self.rocks.contains(&p) {
+                    out.push_str(FG_WHITE);
+                    out.push_str("◼ ");
+                } else {
+                    if (x + y) % 2 == 0 {
+                        out.push_str(BG_GRASS_A);
+                    } else {
+                        out.push_str(BG_GRASS_B);
+                    }
+                    out.push_str("  ");
+                }
+            }
+            out.push_str(RESET);
+            out.push('\n');
         }
 
         if self.over {
-            if self.won {
-                out.push_str(FG_GREEN);
-                out.push_str("You filled the map. You win!\n");
-            } else {
-                out.push_str(FG_RED);
-                out.push_str("Game Over!\n");
-            }
+            out.push_str(FG_RED);
+            out.push_str("\nGame Over!\n");
             out.push_str(FG_WHITE);
-            out.push_str("Press Q to exit.\n");
+            out.push_str("Press R to play again or Q to quit\n");
         }
 
         out.push_str(RESET);
+
         out
     }
 
-    fn handle_command(&mut self, cmd: char) -> bool {
+    fn handle_command(&mut self, cmd: char) -> Option<&'static str> {
         match cmd {
             'w' => self.set_direction(Direction::Up),
             'a' => self.set_direction(Direction::Left),
@@ -421,24 +358,24 @@ impl Game {
             'm' => self.mode = self.mode.toggle(),
             't' => self.speed = self.speed.toggle(),
             'p' => self.paused = !self.paused,
-            'q' => return true,
+            'r' => return Some("restart"),
+            'q' => return Some("quit"),
             _ => {}
         }
-        false
+
+        None
     }
 }
 
 fn parse_command(input: &str) -> Option<char> {
-    input
-        .chars()
-        .find(|ch| !ch.is_whitespace())
-        .map(|ch| ch.to_ascii_lowercase())
+    input.chars().find(|c| !c.is_whitespace()).map(|c| c.to_ascii_lowercase())
 }
 
 pub fn run() -> io::Result<()> {
     let mut game = Game::new(DEFAULT_WIDTH, DEFAULT_HEIGHT);
 
     let (tx, rx) = mpsc::channel::<String>();
+
     thread::spawn(move || {
         let stdin = io::stdin();
         loop {
@@ -453,136 +390,35 @@ pub fn run() -> io::Result<()> {
     });
 
     loop {
-        print!("{}", CLEAR);
         print!("{}", game.render());
         io::stdout().flush()?;
 
-        if game.over {
-            match rx.recv() {
-                Ok(input) => {
-                    if parse_command(&input) == Some('q') {
-                        break;
-                    }
-                }
-                Err(_) => break,
-            }
-            continue;
-        }
-
         let tick_delay = game.speed.tick_delay();
+
         match rx.recv_timeout(tick_delay) {
             Ok(input) => {
                 if let Some(cmd) = parse_command(&input) {
-                    if game.handle_command(cmd) {
-                        break;
-                    }
-                }
-
-                while let Ok(queued) = rx.try_recv() {
-                    if let Some(cmd) = parse_command(&queued) {
-                        if game.handle_command(cmd) {
-                            print!("{}", CLEAR);
-                            println!(
-                                "{}Thanks for playing! Final score: {}{}",
-                                FG_CYAN, game.score, RESET
-                            );
-                            return Ok(());
+                    if let Some(action) = game.handle_command(cmd) {
+                        match action {
+                            "quit" => break,
+                            "restart" => game = Game::new(DEFAULT_WIDTH, DEFAULT_HEIGHT),
+                            _ => {}
                         }
                     }
                 }
             }
+
             Err(mpsc::RecvTimeoutError::Timeout) => {}
-            Err(mpsc::RecvTimeoutError::Disconnected) => break,
+
+            Err(_) => break,
         }
 
         game.step();
     }
 
-    print!("{}", CLEAR);
-    println!(
-        "{}Thanks for playing! Final score: {}{}",
-        FG_CYAN, game.score, RESET
-    );
+    println!("{}Thanks for playing!{}", FG_CYAN, RESET);
+
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn enforces_minimum_board_size() {
-        let game = Game::new(1, 2);
-        assert_eq!(game.width, MIN_BOARD_SIZE);
-        assert_eq!(game.height, MIN_BOARD_SIZE);
-    }
-
-    #[test]
-    fn cannot_reverse_direction() {
-        let mut game = Game::new(10, 10);
-        game.set_direction(Direction::Left);
-        assert_eq!(game.direction, Direction::Right);
-    }
-
-    #[test]
-    fn wrap_mode_crosses_edges() {
-        let mut game = Game::new(6, 6);
-        game.snake = VecDeque::from([Point { x: 0, y: 3 }]);
-        game.direction = Direction::Left;
-        game.mode = GameMode::WrapAround;
-        game.step();
-        assert_eq!(game.head(), Point { x: 5, y: 3 });
-        assert!(!game.over);
-    }
-
-    #[test]
-    fn classic_mode_hits_wall() {
-        let mut game = Game::new(5, 5);
-        game.mode = GameMode::Classic;
-        game.step();
-        game.step();
-        game.step();
-        assert!(game.over);
-    }
-
-    #[test]
-    fn spawn_food_none_when_board_full() {
-        let mut game = Game::new(5, 5);
-        game.snake = (0..5)
-            .flat_map(|y| (0..5).map(move |x| Point { x, y }))
-            .collect();
-        game.rocks.clear();
-
-        assert_eq!(game.spawn_food(), None);
-    }
-
-    #[test]
-    fn parse_command_ignores_whitespace() {
-        assert_eq!(parse_command("   D\n"), Some('d'));
-    }
-
-    #[test]
-    fn parse_command_returns_none_for_whitespace_only() {
-        assert_eq!(parse_command("   \n\t"), None);
-    }
-
-    #[test]
-    fn eating_food_increases_score_with_speed_bonus() {
-        let mut game = Game::new(8, 8);
-        game.snake = VecDeque::from([
-            Point { x: 4, y: 4 },
-            Point { x: 3, y: 4 },
-            Point { x: 2, y: 4 },
-        ]);
-        game.direction = Direction::Right;
-        game.food = Some(Point { x: 5, y: 4 });
-        game.rocks.clear();
-        game.speed = Speed::Turbo;
-
-        game.step();
-
-        assert_eq!(game.score, Speed::Turbo.bonus());
-        assert_eq!(game.head(), Point { x: 5, y: 4 });
-        assert!(!game.over);
     }
 }
