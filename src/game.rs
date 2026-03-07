@@ -415,6 +415,26 @@ fn try_restore_stdin(config: &str) {
 #[cfg(not(unix))]
 fn try_restore_stdin(_config: &str) {}
 
+struct RawModeGuard {
+    state: Option<String>,
+}
+
+impl RawModeGuard {
+    fn new() -> Self {
+        Self {
+            state: try_enable_raw_stdin(),
+        }
+    }
+}
+
+impl Drop for RawModeGuard {
+    fn drop(&mut self) {
+        if let Some(state) = self.state.as_deref() {
+            try_restore_stdin(state);
+        }
+    }
+}
+
 impl Game {
     fn handle_command(&mut self, cmd: char) -> bool {
         match cmd {
@@ -434,7 +454,7 @@ impl Game {
 
 pub fn run() -> io::Result<()> {
     let mut game = Game::new(20, 12);
-    let raw_state = try_enable_raw_stdin();
+    let _raw_mode_guard = RawModeGuard::new();
 
     let (tx, rx) = mpsc::channel::<u8>();
     thread::spawn(move || {
@@ -472,9 +492,6 @@ pub fn run() -> io::Result<()> {
             while let Ok(queued) = rx.try_recv() {
                 if let Some(cmd) = parse_input_byte(queued) {
                     if game.handle_command(cmd) {
-                        if let Some(state) = raw_state.as_deref() {
-                            try_restore_stdin(state);
-                        }
                         print!("{}", CLEAR);
                         println!(
                             "{}Thanks for playing! Final score: {}{}",
@@ -489,10 +506,6 @@ pub fn run() -> io::Result<()> {
         if !game.over {
             game.step();
         }
-    }
-
-    if let Some(state) = raw_state.as_deref() {
-        try_restore_stdin(state);
     }
 
     print!("{}", CLEAR);
