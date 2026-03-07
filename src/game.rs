@@ -1,5 +1,8 @@
 use std::collections::VecDeque;
 use std::io::{self, Write};
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 
 const RESET: &str = "\x1b[0m";
 const CLEAR: &str = "\x1b[2J\x1b[H";
@@ -90,6 +93,14 @@ impl Speed {
             Speed::Chill => "Chill",
             Speed::Normal => "Normal",
             Speed::Turbo => "Turbo",
+        }
+    }
+
+    fn tick_delay(self) -> Duration {
+        match self {
+            Speed::Chill => Duration::from_millis(220),
+            Speed::Normal => Duration::from_millis(150),
+            Speed::Turbo => Duration::from_millis(90),
         }
     }
 }
@@ -355,9 +366,46 @@ impl Game {
     }
 }
 
+fn parse_command(input: &str) -> Option<char> {
+    input
+        .chars()
+        .find(|ch| !ch.is_whitespace())
+        .map(|ch| ch.to_ascii_lowercase())
+}
+
+impl Game {
+    fn handle_command(&mut self, cmd: char) -> bool {
+        match cmd {
+            'w' => self.set_direction(Direction::Up),
+            'a' => self.set_direction(Direction::Left),
+            's' => self.set_direction(Direction::Down),
+            'd' => self.set_direction(Direction::Right),
+            'm' => self.mode = self.mode.toggle(),
+            't' => self.speed = self.speed.toggle(),
+            'p' => self.paused = !self.paused,
+            'q' => return true,
+            _ => {}
+        }
+        false
+    }
+}
+
 pub fn run() -> io::Result<()> {
     let mut game = Game::new(20, 12);
-    let mut input = String::new();
+
+    let (tx, rx) = mpsc::channel::<String>();
+    thread::spawn(move || {
+        let stdin = io::stdin();
+        loop {
+            let mut input = String::new();
+            if stdin.read_line(&mut input).is_err() {
+                break;
+            }
+            if tx.send(input).is_err() {
+                break;
+            }
+        }
+    });
 
     loop {
         print!("{}", CLEAR);
@@ -365,27 +413,41 @@ pub fn run() -> io::Result<()> {
         io::stdout().flush()?;
 
         if game.over {
-            input.clear();
-            io::stdin().read_line(&mut input)?;
-            if input.trim().eq_ignore_ascii_case("q") {
-                break;
+            match rx.recv() {
+                Ok(input) => {
+                    if parse_command(&input) == Some('q') {
+                        break;
+                    }
+                }
+                Err(_) => break,
             }
             continue;
         }
 
-        input.clear();
-        io::stdin().read_line(&mut input)?;
+        let tick_delay = game.speed.tick_delay();
+        match rx.recv_timeout(tick_delay) {
+            Ok(input) => {
+                if let Some(cmd) = parse_command(&input) {
+                    if game.handle_command(cmd) {
+                        break;
+                    }
+                }
 
-        match input.trim().to_ascii_lowercase().as_str() {
-            "w" => game.set_direction(Direction::Up),
-            "a" => game.set_direction(Direction::Left),
-            "s" => game.set_direction(Direction::Down),
-            "d" => game.set_direction(Direction::Right),
-            "m" => game.mode = game.mode.toggle(),
-            "t" => game.speed = game.speed.toggle(),
-            "p" => game.paused = !game.paused,
-            "q" => break,
-            _ => {}
+                while let Ok(queued) = rx.try_recv() {
+                    if let Some(cmd) = parse_command(&queued) {
+                        if game.handle_command(cmd) {
+                            print!("{}", CLEAR);
+                            println!(
+                                "{}Thanks for playing! Final score: {}{}",
+                                FG_CYAN, game.score, RESET
+                            );
+                            return Ok(());
+                        }
+                    }
+                }
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => break,
         }
 
         game.step();
