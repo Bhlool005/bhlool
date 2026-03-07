@@ -301,7 +301,7 @@ impl Game {
         self.snake.push_front(next);
 
         if grows {
-            self.score += self.speed.bonus();
+            self.score = self.score.saturating_add(self.speed.bonus());
 
             if self.occupied_count() >= self.board_capacity() {
                 self.over = true;
@@ -511,6 +511,13 @@ mod tests {
     use super::*;
 
     #[test]
+    fn enforces_minimum_board_size() {
+        let game = Game::new(1, 2);
+        assert_eq!(game.width, MIN_BOARD_SIZE);
+        assert_eq!(game.height, MIN_BOARD_SIZE);
+    }
+
+    #[test]
     fn cannot_reverse_direction() {
         let mut game = Game::new(10, 10);
         game.set_direction(Direction::Left);
@@ -552,5 +559,30 @@ mod tests {
     #[test]
     fn parse_command_ignores_whitespace() {
         assert_eq!(parse_command("   D\n"), Some('d'));
+    }
+
+    #[test]
+    fn parse_command_returns_none_for_whitespace_only() {
+        assert_eq!(parse_command("   \n\t"), None);
+    }
+
+    #[test]
+    fn eating_food_increases_score_with_speed_bonus() {
+        let mut game = Game::new(8, 8);
+        game.snake = VecDeque::from([
+            Point { x: 4, y: 4 },
+            Point { x: 3, y: 4 },
+            Point { x: 2, y: 4 },
+        ]);
+        game.direction = Direction::Right;
+        game.food = Some(Point { x: 5, y: 4 });
+        game.rocks.clear();
+        game.speed = Speed::Turbo;
+
+        game.step();
+
+        assert_eq!(game.score, Speed::Turbo.bonus());
+        assert_eq!(game.head(), Point { x: 5, y: 4 });
+        assert!(!game.over);
     }
 }
