@@ -381,11 +381,14 @@ pub fn run() -> io::Result<()> {
         let stdin = io::stdin();
         loop {
             let mut input = String::new();
-            if stdin.read_line(&mut input).is_err() {
-                break;
-            }
-            if tx.send(input).is_err() {
-                break;
+            match stdin.read_line(&mut input) {
+                Ok(0) => break,
+                Ok(_) => {
+                    if tx.send(input).is_err() {
+                        break;
+                    }
+                }
+                Err(_) => break,
             }
         }
     });
