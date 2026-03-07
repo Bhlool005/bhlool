@@ -16,6 +16,10 @@ const FG_CYAN: &str = "\x1b[96m";
 const BG_GRASS_A: &str = "\x1b[48;5;34m";
 const BG_GRASS_B: &str = "\x1b[48;5;28m";
 
+const DEFAULT_WIDTH: i32 = 20;
+const DEFAULT_HEIGHT: i32 = 12;
+const DEFAULT_ROCKS: usize = 8;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct Point {
     x: i32,
@@ -105,12 +109,21 @@ impl Speed {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Tile {
+    Empty,
+    Food,
+    Rock,
+    SnakeBody,
+    SnakeHead,
+}
+
 pub struct Game {
     width: i32,
     height: i32,
     snake: VecDeque<Point>,
     direction: Direction,
-    food: Point,
+    food: Option<Point>,
     rocks: Vec<Point>,
     score: u32,
     seed: u64,
@@ -123,27 +136,35 @@ pub struct Game {
 
 impl Game {
     pub fn new(width: i32, height: i32) -> Self {
-        let mut snake = VecDeque::new();
+        let width = width.max(1);
+        let height = height.max(1);
+
         let center = Point {
             x: width / 2,
             y: height / 2,
         };
-        snake.push_front(center);
-        snake.push_back(Point {
-            x: center.x - 1,
-            y: center.y,
-        });
-        snake.push_back(Point {
-            x: center.x - 2,
-            y: center.y,
-        });
+
+        let mut snake = VecDeque::new();
+        snake.push_back(center);
+        if center.x > 0 {
+            snake.push_back(Point {
+                x: center.x - 1,
+                y: center.y,
+            });
+        }
+        if center.x > 1 {
+            snake.push_back(Point {
+                x: center.x - 2,
+                y: center.y,
+            });
+        }
 
         let mut game = Self {
             width,
             height,
             snake,
             direction: Direction::Right,
-            food: Point { x: 0, y: 0 },
+            food: None,
             rocks: Vec::new(),
             score: 0,
             seed: 0x420_2026,
@@ -153,9 +174,23 @@ impl Game {
             mode: GameMode::WrapAround,
             speed: Speed::Normal,
         };
-        game.rocks = game.spawn_rocks(8);
+
+        game.rocks = game.spawn_rocks(DEFAULT_ROCKS);
         game.food = game.spawn_food();
+        if game.food.is_none() {
+            game.over = true;
+            game.won = true;
+        }
+
         game
+    }
+
+    fn board_capacity(&self) -> usize {
+        (self.width * self.height) as usize
+    }
+
+    fn occupied_count(&self) -> usize {
+        self.snake.len() + self.rocks.len()
     }
 
     fn head(&self) -> Point {
@@ -177,30 +212,62 @@ impl Game {
         }
     }
 
-    fn spawn_rocks(&mut self, count: usize) -> Vec<Point> {
-        let mut rocks = Vec::new();
-        let mut attempts = 0usize;
-        let max_attempts = (self.width as usize * self.height as usize).saturating_mul(20);
+    fn is_snake_at(&self, p: Point) -> bool {
+        self.snake.iter().any(|seg| *seg == p)
+    }
 
-        while rocks.len() < count && attempts < max_attempts {
+    fn is_rock_at(&self, p: Point) -> bool {
+        self.rocks.iter().any(|rock| *rock == p)
+    }
+
+    fn spawn_rocks(&mut self, requested: usize) -> Vec<Point> {
+        let mut rocks = Vec::new();
+        if self.board_capacity() <= self.snake.len() {
+            return rocks;
+        }
+
+        let max_placeable = self.board_capacity().saturating_sub(self.snake.len() + 1);
+        let target = requested.min(max_placeable);
+        let mut attempts = 0usize;
+        let max_attempts = self.board_capacity().saturating_mul(24).max(1);
+
+        while rocks.len() < target && attempts < max_attempts {
             attempts += 1;
             let p = self.random_point();
-            let too_close = (p.x - self.head().x).abs() <= 2 && (p.y - self.head().y).abs() <= 2;
-            if self.snake.contains(&p) || rocks.contains(&p) || too_close {
+            let head = self.head();
+            let too_close = (p.x - head.x).abs() <= 2 && (p.y - head.y).abs() <= 2;
+            if self.is_snake_at(p) || rocks.contains(&p) || too_close {
                 continue;
             }
             rocks.push(p);
         }
+
         rocks
     }
 
-    fn spawn_food(&mut self) -> Point {
-        loop {
+    fn spawn_food(&mut self) -> Option<Point> {
+        if self.occupied_count() >= self.board_capacity() {
+            return None;
+        }
+
+        let max_attempts = self.board_capacity().saturating_mul(4).max(1);
+        for _ in 0..max_attempts {
             let p = self.random_point();
-            if !self.snake.contains(&p) && !self.rocks.contains(&p) {
-                return p;
+            if !self.is_snake_at(p) && !self.is_rock_at(p) {
+                return Some(p);
             }
         }
+
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let p = Point { x, y };
+                if !self.is_snake_at(p) && !self.is_rock_at(p) {
+                    return Some(p);
+                }
+            }
+        }
+
+        None
     }
 
     fn set_direction(&mut self, next: Direction) {
@@ -247,14 +314,14 @@ impl Game {
             return;
         };
 
-        if self.rocks.contains(&next) {
+        if self.is_rock_at(next) {
             self.over = true;
             return;
         }
 
         let tail = *self.snake.back().expect("snake has tail");
-        let grows = next == self.food;
-        if self.snake.contains(&next) && (grows || next != tail) {
+        let grows = self.food == Some(next);
+        if self.is_snake_at(next) && (grows || next != tail) {
             self.over = true;
             return;
         }
@@ -264,19 +331,53 @@ impl Game {
         if grows {
             self.score += self.speed.bonus();
 
-            if self.snake.len() as i32 + self.rocks.len() as i32 >= self.width * self.height {
+            if self.occupied_count() >= self.board_capacity() {
+                self.food = None;
                 self.over = true;
                 self.won = true;
                 return;
             }
 
             self.food = self.spawn_food();
+            if self.food.is_none() {
+                self.over = true;
+                self.won = true;
+            }
         } else {
             self.snake.pop_back();
         }
     }
 
+    fn build_tile_map(&self) -> Vec<Tile> {
+        let mut tiles = vec![Tile::Empty; self.board_capacity()];
+
+        for rock in &self.rocks {
+            let index = self.point_to_index(*rock);
+            tiles[index] = Tile::Rock;
+        }
+
+        for segment in self.snake.iter().skip(1) {
+            let index = self.point_to_index(*segment);
+            tiles[index] = Tile::SnakeBody;
+        }
+
+        if let Some(food) = self.food {
+            let index = self.point_to_index(food);
+            tiles[index] = Tile::Food;
+        }
+
+        let head_index = self.point_to_index(self.head());
+        tiles[head_index] = Tile::SnakeHead;
+
+        tiles
+    }
+
+    fn point_to_index(&self, p: Point) -> usize {
+        (p.y * self.width + p.x) as usize
+    }
+
     fn render(&self) -> String {
+        let tiles = self.build_tile_map();
         let mut out = String::new();
 
         out.push_str(FG_GRAY);
@@ -291,36 +392,33 @@ impl Game {
             out.push('|');
             for x in 0..self.width {
                 let p = Point { x, y };
-                if p == self.head() {
-                    out.push_str(FG_BLUE);
-                    out.push_str("██");
-                    continue;
+                let tile = tiles[self.point_to_index(p)];
+                match tile {
+                    Tile::SnakeHead => {
+                        out.push_str(FG_BLUE);
+                        out.push_str("██");
+                    }
+                    Tile::Food => {
+                        out.push_str(FG_RED);
+                        out.push_str("● ");
+                    }
+                    Tile::SnakeBody => {
+                        out.push_str(FG_CYAN);
+                        out.push_str("▓▓");
+                    }
+                    Tile::Rock => {
+                        out.push_str(FG_WHITE);
+                        out.push_str("◼ ");
+                    }
+                    Tile::Empty => {
+                        if (x + y) % 2 == 0 {
+                            out.push_str(BG_GRASS_A);
+                        } else {
+                            out.push_str(BG_GRASS_B);
+                        }
+                        out.push_str("  ");
+                    }
                 }
-
-                if p == self.food {
-                    out.push_str(FG_RED);
-                    out.push_str("● ");
-                    continue;
-                }
-
-                if self.snake.iter().skip(1).any(|segment| *segment == p) {
-                    out.push_str(FG_CYAN);
-                    out.push_str("▓▓");
-                    continue;
-                }
-
-                if self.rocks.contains(&p) {
-                    out.push_str(FG_WHITE);
-                    out.push_str("◼ ");
-                    continue;
-                }
-
-                if (x + y) % 2 == 0 {
-                    out.push_str(BG_GRASS_A);
-                } else {
-                    out.push_str(BG_GRASS_B);
-                }
-                out.push_str("  ");
             }
             out.push_str(RESET);
             out.push_str(FG_GRAY);
@@ -364,16 +462,7 @@ impl Game {
         out.push_str(RESET);
         out
     }
-}
 
-fn parse_command(input: &str) -> Option<char> {
-    input
-        .chars()
-        .find(|ch| !ch.is_whitespace())
-        .map(|ch| ch.to_ascii_lowercase())
-}
-
-impl Game {
     fn handle_command(&mut self, cmd: char) -> bool {
         match cmd {
             'w' => self.set_direction(Direction::Up),
@@ -390,8 +479,15 @@ impl Game {
     }
 }
 
+fn parse_command(input: &str) -> Option<char> {
+    input
+        .chars()
+        .find(|ch| !ch.is_whitespace())
+        .map(|ch| ch.to_ascii_lowercase())
+}
+
 pub fn run() -> io::Result<()> {
-    let mut game = Game::new(20, 12);
+    let mut game = Game::new(DEFAULT_WIDTH, DEFAULT_HEIGHT);
 
     let (tx, rx) = mpsc::channel::<String>();
     thread::spawn(move || {
@@ -490,5 +586,28 @@ mod tests {
         game.step();
         game.step();
         assert!(game.over);
+    }
+
+    #[test]
+    fn spawn_food_none_when_board_full() {
+        let mut game = Game::new(5, 5);
+        game.snake = (0..5)
+            .flat_map(|y| (0..5).map(move |x| Point { x, y }))
+            .collect();
+        game.rocks.clear();
+
+        assert_eq!(game.spawn_food(), None);
+    }
+
+    #[test]
+    fn tiny_board_initializes_without_negative_segments() {
+        let game = Game::new(1, 1);
+        assert_eq!(game.snake.len(), 1);
+        assert_eq!(game.head(), Point { x: 0, y: 0 });
+    }
+
+    #[test]
+    fn parse_command_ignores_whitespace() {
+        assert_eq!(parse_command("   D\n"), Some('d'));
     }
 }
