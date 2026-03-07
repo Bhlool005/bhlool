@@ -63,7 +63,7 @@ impl GameMode {
     fn as_str(self) -> &'static str {
         match self {
             GameMode::Classic => "Classic",
-            GameMode::WrapAround => "WrapAround",
+            GameMode::WrapAround => "Wrap-around",
         }
     }
 }
@@ -440,23 +440,25 @@ impl Game {
             self.mode.as_str()
         ));
         out.push_str(FG_GREEN);
-        out.push_str("Controls: W/A/S/D move, M mode, T speed, P pause, Q quit\n");
+        out.push_str("Controls: W/A/S/D = move | M = mode | T = speed | P = pause | Q = quit\n");
 
         if self.paused {
             out.push_str(FG_YELLOW);
-            out.push_str("Paused. Press P to continue.\n");
+            out.push_str("Paused — press P to resume.\n");
         }
 
         if self.over {
             if self.won {
                 out.push_str(FG_GREEN);
-                out.push_str("You filled the map. You win!\n");
+                out.push_str("Victory! You filled every free tile.\n");
             } else {
                 out.push_str(FG_RED);
-                out.push_str("Game Over!\n");
+                out.push_str("Game over!\n");
             }
             out.push_str(FG_WHITE);
             out.push_str("Press Q to exit.\n");
+            out.push_str(FG_GRAY);
+            out.push_str("Legend: ██ head  ▓▓ body  ● food  ◼ rock\n");
         }
 
         out.push_str(RESET);
@@ -534,7 +536,7 @@ pub fn run() -> io::Result<()> {
                         if game.handle_command(cmd) {
                             print!("{}", CLEAR);
                             println!(
-                                "{}Thanks for playing! Final score: {}{}",
+                                "{}Thanks for playing! Final score: {}.{}",
                                 FG_CYAN, game.score, RESET
                             );
                             return Ok(());
@@ -551,7 +553,7 @@ pub fn run() -> io::Result<()> {
 
     print!("{}", CLEAR);
     println!(
-        "{}Thanks for playing! Final score: {}{}",
+        "{}Thanks for playing! Final score: {}.{}",
         FG_CYAN, game.score, RESET
     );
     Ok(())
